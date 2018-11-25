@@ -19,9 +19,11 @@ namespace dsHelper
     {
         private BindingSource bindingSource1 = new BindingSource();
         public DataTable myDataTable = new DataTable();
+        public bool scanState = false;
         public int currentRow = 0;
         public int stockChange = 0;
         public int rowCount = 0;
+        public string connectionString = "Data Source = (LocalDB)\\MSSQLLocalDB; AttachDbFilename=\"C:\\Users\\ASUS\\Documents\\Visual Studio 2015\\Projects\\dsHelper\\dsHelper\\App_Data\\DropShipHelperDB.mdf\"; Integrated Security = True";
 
         public StockForm()
         {
@@ -33,15 +35,13 @@ namespace dsHelper
         {
             myDataTable.Columns.Add("Id");
             myDataTable.Columns.Add("Name");
-            myDataTable.Columns.Add("Status");
+            myDataTable.Columns.Add("RecordEmptyStock");
+            myDataTable.Columns.Add("CurrentEmptyStock");
             myDataTable.Columns.Add("SourceUrl");
             myDataTable.Columns.Add("DropshipUrl");
             //myDataTable.Columns.Add("DisplayPrice");
             //myDataTable.Columns.Add("RealPrice");
-            //myDataTable.Columns.Add("DropshipPrice");
-
-            btnStart.Enabled = true;
-            btnStop.Enabled = false;            
+            //myDataTable.Columns.Add("DropshipPrice");            
         }         
        
         public int CountStringOccurrences(string text, string pattern)
@@ -58,29 +58,42 @@ namespace dsHelper
         }
 
         private void btnStart_Click(object sender, EventArgs e)
-        {
-            if (!backgroundWorker1.IsBusy)
+        {                        
+            if (scanState)
             {
-                currentRow = 0;
-                stockChange = 0;
-                lblProgress.Text = "สินค้า: 0 / 0";
-                lblChange.Text = "สต็อกเปลี่ยน: 0";
-                myDataTable.Clear();                
-                btnStart.Enabled = false;
-                btnStop.Enabled = true;
-                backgroundWorker1.RunWorkerAsync();
-            }
-        }
+                if (backgroundWorker1.WorkerSupportsCancellation == true)
+                {
+                    backgroundWorker1.CancelAsync();
+                    btnScan.Text = "Scan";
+                    btnUpdate.Enabled = true;                    
+                    scanState = false;
 
-        private void btnStop_Click(object sender, EventArgs e)
-        {
-            if (backgroundWorker1.WorkerSupportsCancellation == true)
-            {                                
-                btnStart.Enabled = true;
-                btnStop.Enabled = false;                                
-                backgroundWorker1.CancelAsync();                                
-            }            
-        }
+                    if (myDataTable == null || myDataTable.Rows.Count == 0)
+                    {
+                        btnUpdate.Enabled = false;
+                    }
+                    else
+                    {
+                        btnUpdate.Enabled = true;
+                    }
+                }
+            }
+            else {
+                if (!backgroundWorker1.IsBusy)
+                {
+                    currentRow = 0;
+                    stockChange = 0;
+                    lblProgress.Text = "สินค้า: 0 / 0";
+                    lblChange.Text = "สต็อกเปลี่ยน: 0";
+                    myDataTable.Clear();
+                    backgroundWorker1.RunWorkerAsync();
+                    btnScan.Text = "Stop";
+                    btnUpdate.Enabled = false;
+                    scanState = true;
+                }                
+            }
+            
+        }        
 
         private void backgroundWorker1_DoWork(object sender, DoWorkEventArgs e)
         {
@@ -89,15 +102,16 @@ namespace dsHelper
 
         private void backgroundWorker1_ProgressChanged(object sender, ProgressChangedEventArgs e)
         {       
-            if (btnStart.Enabled == false)
+            if (scanState)
             { 
                 if (myDataTable.Rows.Count > 0)
                 { 
                     gvWordCount.DataSource = myDataTable;
                     gvWordCount.Columns[0].Width = 50;
-                    gvWordCount.Columns[1].Width = 350;
-                    gvWordCount.Columns[2].Width = 50;
-                    gvWordCount.Columns[3].Width = 200;
+                    gvWordCount.Columns[1].Width = 450;
+                    gvWordCount.Columns[2].Width = 100;
+                    gvWordCount.Columns[3].Width = 100;
+                    gvWordCount.Columns[4].Width = 200;
                     gvWordCount.Update();
                     gvWordCount.Refresh();                                              
                 }
@@ -108,16 +122,17 @@ namespace dsHelper
         }       
 
         private void backgroundWorker1_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
-        {            
-            btnStart.Enabled = true;
-            btnStop.Enabled = false;
+        {
+            btnScan.Text = "Scan";
+            btnUpdate.Enabled = true;
+            scanState = false;            
         }
 
         private void GetData(System.Object sender, DoWorkEventArgs e)
         {
             BackgroundWorker worker = sender as BackgroundWorker; 
             string urlAddress = "";
-            SqlConnection myConnection = new SqlConnection("Data Source = (LocalDB)\\MSSQLLocalDB; AttachDbFilename=\"C:\\Users\\ASUS\\Documents\\Visual Studio 2015\\Projects\\dsHelper\\dsHelper\\App_Data\\DropShipHelperDB.mdf\"; Integrated Security = True");
+            SqlConnection myConnection = new SqlConnection(connectionString);
             string rowID = "0";
 
             try
@@ -127,8 +142,7 @@ namespace dsHelper
                 SqlCommand myCommand = new SqlCommand("select * from WordCount", myConnection);
                 SqlCommand myCommand2 = new SqlCommand("select COUNT(*) from WordCount", myConnection);
 
-                rowCount = (int)myCommand2.ExecuteScalar();
-                              
+                rowCount = (int)myCommand2.ExecuteScalar();                              
 
                 SqlDataReader myReader = null;
 
@@ -177,7 +191,8 @@ namespace dsHelper
                             myRow["Id"] = myReader["Id"];
                             myRow["Name"] = myReader["Name"];
                             myRow["SourceUrl"] = myReader["Url"];
-                            myRow["Status"] = "เปลี่ยน";
+                            myRow["RecordEmptyStock"] = myReader["WordCount"];
+                            myRow["CurrentEmptyStock"] = wordCount;
                             myRow["DropshipUrl"] = myReader["ShopeeUrl"];
                             //myRow["DisplayPrice"] = myReader["DisplayPrice"];
                             //myRow["RealPrice"] = myReader["RealPrice"];
@@ -197,6 +212,49 @@ namespace dsHelper
             {
                 MessageBox.Show(rowID.ToString() + " : " + ex.ToString());
             }
-        }               
+        }
+
+        private void btnUpdate_Click(object sender, EventArgs e)
+        {          
+                using (SqlConnection con = new SqlConnection(connectionString))
+                {
+                    con.Open();
+                    // On all tables' rows
+                    foreach (DataRow dtRow in myDataTable.Rows)
+                    {
+                        string id = dtRow["Id"].ToString();
+                        string recordEmptyStock = dtRow["RecordEmptyStock"].ToString();
+                        string currentEmptyStock = dtRow["CurrentEmptyStock"].ToString();
+
+
+                        DialogResult dialogResult = MessageBox.Show("Update Id " + id + " Empty stock from " + recordEmptyStock + " -> " + currentEmptyStock, "Update record?", MessageBoxButtons.YesNo);
+                        if (dialogResult == DialogResult.Yes)
+                        {                           
+                            using (SqlCommand cmd = new SqlCommand("UPDATE WordCount SET WordCount = @WordCount WHERE Id = @Id", con))
+                            {
+                                cmd.CommandType = CommandType.Text;
+                                cmd.Parameters.AddWithValue("@Id", Convert.ToInt32(id));
+                                cmd.Parameters.AddWithValue("@WordCount", Convert.ToInt32(currentEmptyStock));
+                                    
+                                int rowsAffected = cmd.ExecuteNonQuery();                                    
+                            }                           
+                        }
+                    }
+                    con.Close();
+                }
+
+                DialogResult dialogResult2 = MessageBox.Show("Update completed.");
+
+                currentRow = 0;
+                stockChange = 0;
+                lblProgress.Text = "สินค้า: 0 / 0";
+                lblChange.Text = "สต็อกเปลี่ยน: 0";
+                
+                btnScan.Text = "Scan";
+                btnUpdate.Enabled = false;
+                scanState = false;
+
+                myDataTable.Clear();            
+        }
     }
 }
