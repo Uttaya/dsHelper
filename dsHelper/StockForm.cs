@@ -23,7 +23,7 @@ namespace dsHelper
         public int currentRow = 0;
         public int stockChange = 0;
         public int rowCount = 0;
-        public string connectionString = "Data Source = (LocalDB)\\MSSQLLocalDB; AttachDbFilename=\"C:\\Users\\ASUS\\Documents\\Visual Studio 2015\\Projects\\dsHelper\\dsHelper\\App_Data\\DropShipHelperDB.mdf\"; Integrated Security = True";
+        public string connectionString = "Data Source = (LocalDB)\\MSSQLLocalDB; AttachDbFilename=\"D:\\Source\\Repos\\dsHelper\\dsHelper\\App_Data\\DropShipHelperDB.mdf\"; Integrated Security = True";
 
         public StockForm()
         {
